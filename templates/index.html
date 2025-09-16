@@ -9,6 +9,7 @@
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
     <style>
         .video-container {
+            position: relative;
             width: 100%;
             height: auto;
             aspect-ratio: 16 / 9;
@@ -16,10 +17,20 @@
             border-radius: 0.5rem;
             overflow: hidden;
         }
-        .video-container video {
+        .video-container canvas {
             width: 100%;
             height: 100%;
             object-fit: contain;
+        }
+        .info-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            color: white;
+            font-size: 1.25rem;
+            text-shadow: 2px 2px 4px #000000;
+            user-select: none;
         }
     </style>
 </head>
@@ -49,23 +60,16 @@
                     <div class="card-header">
                         <h3 class="card-title">
                             <i class="fas fa-video me-2"></i>
-                            Live Video Stream from Raspberry Pi
+                            Live Anomaly Feed
                         </h3>
                     </div>
                     <div class="card-body">
                         <div class="video-container">
-                            <video 
-                                id="video-stream" 
-                                controls 
-                                autoplay 
-                                muted 
-                                class="w-100 h-100"
-                                onerror="this.src='https://placehold.co/640x480/333333/FFFFFF?text=Stream+Loading...';"
-                            >
-                                <!-- The ngrok URL is hardcoded here -->
-                                <source src="https://a5d267df180d.ngrok-free.app/video_feed" type="video/webm">
-                                Your browser does not support the video tag.
-                            </video>
+                            <canvas id="live-canvas"></canvas>
+                            <div id="overlay" class="info-overlay">
+                                <p>Status: <span id="status-text">Connecting...</span></p>
+                                <p>Anomaly Score: <span id="anomaly-score">N/A</span></p>
+                            </div>
                         </div>
                     </div>
                 </div>
