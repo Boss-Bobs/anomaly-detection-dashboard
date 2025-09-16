@@ -7,6 +7,7 @@ class AnomalyDashboard {
         this.loadedImages = new Set();
         this.performanceStart = 0;
         this.initializeEventListeners();
+        this.initializeVideoFeed();
         this.addPerformanceBadge();
     }
 
@@ -26,9 +27,63 @@ class AnomalyDashboard {
             this.showSection('txHistoryDisplay');
             this.loadTransactionHistory();
         });
-
     }
 
+    initializeVideoFeed() {
+        // DOM elements
+        const canvas = document.getElementById('live-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status-text');
+        const anomalyScoreText = document.getElementById('anomaly-score');
+
+        // WebSocket connection for real-time video frames and anomaly data
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // Use the same ngrok URL as the HTML video source
+        const wsUrl = `${protocol}//a5d267df180d.ngrok-free.app/ws/video_feed`;
+        let ws = new WebSocket(wsUrl);
+
+        // Image object to draw to canvas
+        const img = new Image();
+
+        // Event handler for when a new frame is received
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            // Update the live feed canvas
+            if (data.frame) {
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                };
+                img.src = `data:image/jpeg;base64,${data.frame}`;
+
+                // Update anomaly score and status
+                anomalyScoreText.textContent = data.anomaly_score.toFixed(4);
+                statusText.textContent = data.is_anomaly ? 'ANOMALY DETECTED!' : 'Normal';
+                statusText.style.color = data.is_anomaly ? 'red' : 'green';
+            }
+        };
+
+        // Event handlers for WebSocket status
+        ws.onopen = () => {
+            statusText.textContent = 'Connected';
+            statusText.style.color = 'green';
+            console.log('WebSocket connection established.');
+        };
+
+        ws.onclose = () => {
+            statusText.textContent = 'Disconnected';
+            statusText.style.color = 'red';
+            console.log('WebSocket connection closed.');
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            statusText.textContent = 'Error';
+            statusText.style.color = 'red';
+        };
+    }
 
     showSection(sectionId) {
         // Hide all sections
@@ -52,17 +107,17 @@ class AnomalyDashboard {
         try {
             this.performanceStart = Date.now();
             this.showLoadingState('gallery');
-            
+
             const response = await fetch('/api/anomaly-images');
             const data = await response.json();
-            
+
             if (data.success) {
                 this.imageMetadata = data.images;
                 this.displayAnomalyGallery();
-                
+
                 const loadTime = (Date.now() - this.performanceStart) / 1000;
                 this.showPerformanceMetric(loadTime);
-                
+
                 const blockchainCount = data.images.filter(img => img.blockchain_match).length;
                 this.showSuccess(`🔗 ${blockchainCount} blockchain-verified frames | 📁 ${data.total_count} total frames`);
             } else {
@@ -215,7 +270,6 @@ class AnomalyDashboard {
         document.getElementById('imageName').textContent = infoText;
     }
 
-
     async loadStatistics() {
         // Count local images
         const localCount = Object.keys(this.anomalyImages).length;
@@ -228,18 +282,18 @@ class AnomalyDashboard {
             
             if (data.success) {
                 document.getElementById('blockchainCount').textContent = data.anomaly_count;
-                document.getElementById('blockchainStatus').innerHTML = 
+                document.getElementById('blockchainStatus').innerHTML =
                     '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Connected to Sepolia</span>';
                 this.blockchainData = data;
             } else {
                 document.getElementById('blockchainCount').textContent = 'N/A';
-                document.getElementById('blockchainStatus').innerHTML = 
+                document.getElementById('blockchainStatus').innerHTML =
                     '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Connection Failed</span>';
             }
         } catch (error) {
             console.error('Error loading blockchain data:', error);
             document.getElementById('blockchainCount').textContent = 'N/A';
-            document.getElementById('blockchainStatus').innerHTML = 
+            document.getElementById('blockchainStatus').innerHTML =
                 '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Connection Error</span>';
         }
     }
@@ -265,13 +319,13 @@ class AnomalyDashboard {
                 this.displayTransactionHistory(data.tx_logs);
             } else {
                 error.classList.remove('d-none');
-                document.getElementById('errorMessage').textContent = 
+                document.getElementById('errorMessage').textContent =
                     data.error || 'Unable to connect to the blockchain.';
             }
         } catch (err) {
             loading.classList.add('d-none');
             error.classList.remove('d-none');
-            document.getElementById('errorMessage').textContent = 
+            document.getElementById('errorMessage').textContent =
                 'Network error. Please check your connection.';
         }
     }
@@ -400,8 +454,8 @@ class AnomalyDashboard {
         const badge = document.getElementById('performanceBadge');
         if (badge) {
             badge.innerHTML = `⚡ Loaded in ${loadTime.toFixed(1)}s`;
-            badge.style.backgroundColor = loadTime < 2 ? 'rgba(40, 167, 69, 0.9)' : 
-                                         loadTime < 5 ? 'rgba(255, 193, 7, 0.9)' : 
+            badge.style.backgroundColor = loadTime < 2 ? 'rgba(40, 167, 69, 0.9)' :
+                                         loadTime < 5 ? 'rgba(255, 193, 7, 0.9)' :
                                          'rgba(220, 53, 69, 0.9)';
         }
     }
