@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         .video-container {
             position: relative;
@@ -77,20 +78,7 @@
         </div>
 
         <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="row mb-4">
-                    <div class="col-12">
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-        {% endwith %}
+        <div id="flash-messages"></div>
 
         <!-- Control Buttons -->
         <div class="row mb-4">
@@ -213,6 +201,158 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // --- Configuration ---
+        const serverUrl = 'http://<YOUR_PI_IP_ADDRESS>:5000'; // Change this to your Pi's IP address
+        const socket = io(serverUrl);
+        const canvas = document.getElementById('live-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status-text');
+        const anomalyScoreDisplay = document.getElementById('anomaly-score');
+
+        // --- WebSocket Event Handlers ---
+        socket.on('connect', () => {
+            console.log('Connected to Pi server via WebSocket');
+            statusText.textContent = 'Live Feed Connected';
+            statusText.style.color = 'lightgreen';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from Pi server');
+            statusText.textContent = 'Disconnected. Retrying...';
+            statusText.style.color = 'red';
+        });
+
+        socket.on('connect_error', (err) => {
+            console.error('Connection error:', err);
+            statusText.textContent = 'Error connecting to Pi.';
+            statusText.style.color = 'red';
+        });
+
+        socket.on('video_frame', (data) => {
+            try {
+                const packet = JSON.parse(data);
+                const image = new Image();
+                image.onload = () => {
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                };
+                image.src = 'data:image/jpeg;base64,' + packet.frame;
+
+                // Update anomaly score
+                anomalyScoreDisplay.textContent = packet.anomaly_score.toFixed(4);
+                if (packet.is_anomaly) {
+                    anomalyScoreDisplay.style.color = 'red';
+                    statusText.textContent = 'ANOMALY DETECTED!';
+                    statusText.style.color = 'red';
+                } else {
+                    anomalyScoreDisplay.style.color = 'white';
+                    statusText.textContent = 'Live Feed Connected';
+                    statusText.style.color = 'lightgreen';
+                }
+
+            } catch (e) {
+                console.error('Error processing video frame:', e);
+                statusText.textContent = 'Error processing data.';
+                statusText.style.color = 'red';
+            }
+        });
+
+        // --- Dashboard Functionality (Your existing code) ---
+        // This is a simplified version; you can re-integrate your original main.js logic here.
+        document.getElementById('showAnomalyBtn').addEventListener('click', () => {
+            document.getElementById('anomalyDisplay').classList.remove('section-hidden');
+            document.getElementById('countDisplay').classList.add('section-hidden');
+            document.getElementById('txHistoryDisplay').classList.add('section-hidden');
+            fetchAnomalyImages();
+        });
+
+        document.getElementById('showCountBtn').addEventListener('click', () => {
+            document.getElementById('countDisplay').classList.remove('section-hidden');
+            document.getElementById('anomalyDisplay').classList.add('section-hidden');
+            document.getElementById('txHistoryDisplay').classList.add('section-hidden');
+            fetchBlockchainData();
+        });
+
+        document.getElementById('showTxHistoryBtn').addEventListener('click', () => {
+            document.getElementById('txHistoryDisplay').classList.remove('section-hidden');
+            document.getElementById('anomalyDisplay').classList.add('section-hidden');
+            document.getElementById('countDisplay').classList.add('section-hidden');
+            fetchBlockchainData();
+        });
+
+        async function fetchAnomalyImages() {
+            try {
+                const response = await fetch(`${serverUrl}/api/anomaly-images`);
+                const data = await response.json();
+                const gallery = document.getElementById('thumbnailGrid');
+                gallery.innerHTML = '';
+                if (data.images.length === 0) {
+                    document.getElementById('noImagesMessage').classList.remove('d-none');
+                    document.getElementById('imageGallery').classList.add('d-none');
+                } else {
+                    document.getElementById('noImagesMessage').classList.add('d-none');
+                    document.getElementById('imageGallery').classList.remove('d-none');
+                    data.images.forEach(image => {
+                        const thumbnail = document.createElement('img');
+                        thumbnail.src = `${serverUrl}/api/image/${image.filename}`;
+                        thumbnail.alt = image.filename;
+                        thumbnail.classList.add('thumbnail');
+                        thumbnail.addEventListener('click', () => {
+                            document.getElementById('mainAnomalyImage').src = thumbnail.src;
+                            document.getElementById('imageName').textContent = image.filename;
+                        });
+                        gallery.appendChild(thumbnail);
+                    });
+                }
+            } catch (e) {
+                console.error('Error fetching images:', e);
+            }
+        }
+
+        async function fetchBlockchainData() {
+            document.getElementById('txLoading').classList.remove('d-none');
+            document.getElementById('txContent').classList.add('d-none');
+            document.getElementById('txError').classList.add('d-none');
+
+            try {
+                const response = await fetch(`${serverUrl}/api/blockchain-data`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                
+                document.getElementById('localCount').textContent = data.anomaly_count;
+                document.getElementById('blockchainCount').textContent = data.tx_logs.length;
+
+                const txList = document.getElementById('txHistory');
+                txList.innerHTML = '';
+
+                if (data.tx_logs.length > 0) {
+                    data.tx_logs.forEach(tx => {
+                        const txItem = document.createElement('div');
+                        txItem.classList.add('transaction-item');
+                        txItem.innerHTML = `
+                            <p><strong>Timestamp:</strong> ${tx.timestamp}</p>
+                            <p><strong>Frame ID:</strong> ${tx.frame}</p>
+                            <p><strong>Anomaly Score:</strong> ${tx.error}</p>
+                        `;
+                        txList.appendChild(txItem);
+                    });
+                    document.getElementById('txContent').classList.remove('d-none');
+                    document.getElementById('noTransactions').classList.add('d-none');
+                } else {
+                    document.getElementById('noTransactions').classList.remove('d-none');
+                    document.getElementById('txContent').classList.add('d-none');
+                }
+            } catch (e) {
+                console.error('Error fetching blockchain data:', e);
+                document.getElementById('txError').classList.remove('d-none');
+            } finally {
+                document.getElementById('txLoading').classList.add('d-none');
+            }
+        }
+    </script>
 </body>
 </html>
