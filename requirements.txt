@@ -1,4 +1,6 @@
 Flask-SocketIO
 web3
+opencv-python
 
 gunicorn
+
