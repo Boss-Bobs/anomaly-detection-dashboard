@@ -1,15 +1,20 @@
+# blockchain.py
+
 import os
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
+import time
 
 class BlockchainService:
-    """Service class to handle blockchain interactions."""
-    
     def __init__(self):
-        # Configuration from environment variables with fallbacks
-        self.web3_provider = os.getenv("WEB3_PROVIDER", "https://sepolia.infura.io/v3/8742554fd5c94c549cb8b4117b076e7a")
-        self.contract_address = os.getenv("CONTRACT_ADDRESS", "0x279FcACc1eB244BBD7Be138D34F3f562Da179dd5")
-        
-        # Contract ABI
+        self.web3_provider = os.getenv(
+            "WEB3_PROVIDER", 
+            "wss://sepolia.infura.io/ws/v3/8742554fd5c94c549cb8b4117b076e7a"
+        )
+        self.contract_address = os.getenv(
+            "CONTRACT_ADDRESS", 
+            "0x279FcACc1eB244BBD7Be138D34F3f562Da179dd5"
+        )
         self.contract_abi = [
             {
                 "inputs": [
@@ -63,58 +68,39 @@ class BlockchainService:
                 "stateMutability": "view",
                 "type": "function"
             }
-        ]
+        ] # Your ABI here
         
-        # Initialize Web3 connection
         self.w3 = None
         self.contract = None
-        self._connect()
+        self._connect_with_retries(retries=5, delay=5)
     
-    def _connect(self):
-        """Establish connection to the blockchain."""
-        try:
-            self.w3 = Web3(Web3.HTTPProvider(self.web3_provider))
-            if not self.w3.is_connected():
-                raise Exception("Failed to connect to Sepolia network")
-            
-            self.contract = self.w3.eth.contract(
-                address=self.contract_address, 
-                abi=self.contract_abi
-            )
-        except Exception as e:
-            raise Exception(f"Blockchain connection failed: {str(e)}")
-    
-    def get_anomaly_count(self):
-        """Get the total number of anomalies from the blockchain."""
-        if not self.contract:
-            raise Exception("Contract not initialized")
-        
-        return self.contract.functions.getAnomalyCount().call()
-    
-    def get_transaction_logs(self):
-        """Fetch all transaction logs from the blockchain."""
-        if not self.contract:
-            raise Exception("Contract not initialized")
-        
-        anomaly_count = self.get_anomaly_count()
-        tx_logs = []
-        
-        for i in range(anomaly_count):
+    def _connect_with_retries(self, retries, delay):
+        for i in range(retries):
+            print(f"Attempting blockchain connection (Attempt {i+1}/{retries})...")
             try:
-                folder, frame_idx, error = self.contract.functions.getAnomaly(i).call()
-                tx_logs.append({
-                    "index": i,
-                    "folder": folder,
-                    "frame": frame_idx,
-                    "error": error,
-                    "timestamp": "2025-09-04 01:19"  # Using the timestamp from original code
-                })
+                if self.web3_provider.startswith("wss"):
+                    self.w3 = Web3(Web3.WebsocketProvider(self.web3_provider))
+                else:
+                    self.w3 = Web3(Web3.HTTPProvider(self.web3_provider))
+                
+                if self.w3.is_connected():
+                    self.contract = self.w3.eth.contract(
+                        address=self.contract_address, 
+                        abi=self.contract_abi
+                    )
+                    # Add middleware for POA networks like Sepolia
+                    self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+                    print("Successfully connected to the blockchain!")
+                    return
+                else:
+                    print("Connection failed, retrying...")
             except Exception as e:
-                # Continue if one transaction fails
-                continue
+                print(f"Connection attempt failed: {e}")
+            
+            time.sleep(delay)
         
-        return tx_logs
-    
+        print("Failed to connect to the blockchain after multiple retries.")
+        raise Exception("Failed to connect to the blockchain.")
+
     def is_connected(self):
-        """Check if the blockchain connection is active."""
         return self.w3 and self.w3.is_connected()
