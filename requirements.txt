@@ -1,7 +1,10 @@
 Flask-SocketIO
-eventlet
+gevent
+gevent-websocket
+opencv-python-headless
 web3
 opencv-python
 gunicorn
+
 
 
