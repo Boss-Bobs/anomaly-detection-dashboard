@@ -7,147 +7,172 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script> <!-- Added SocketIO CDN -->
 </head>
 <body>
-    <div class="hero-section">
+
+    <!-- Hero Section -->
+    <section class="hero-section">
         <div class="container">
-            <div class="hero-content text-center text-white">
-                <h1 class="hero-title">
-                    <i class="fas fa-eye me-3"></i>
-                    Anomaly Detection Dashboard
-                </h1>
-                <p class="hero-subtitle">3D Convolutional Autoencoder Results with Blockchain Integration</p>
-                <div class="hero-stats mt-4">
-                    <span class="badge bg-light text-dark me-2">🔍 Deep Learning Detection</span>
-                    <span class="badge bg-light text-dark me-2">🔗 Blockchain Verified</span>
-                    <span class="badge bg-light text-dark">⚡ Optimized Performance</span>
+            <div class="row justify-content-center">
+                <div class="col-lg-8 text-center hero-content">
+                    <h1 class="hero-title">Anomaly Detection Dashboard</h1>
+                    <p class="hero-subtitle">3D Convolutional Autoencoder Results with Blockchain Integration</p>
+                    <div class="hero-stats mt-4">
+                        <span class="badge bg-light text-dark me-2">🔍 Deep Learning Detection</span>
+                        <span class="badge bg-light text-dark me-2">🔗 Blockchain Verified</span>
+                        <span class="badge bg-light text-dark">⚡ Optimized Performance</span>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div class="container-fluid px-4 py-5">
+    <div class="container-fluid py-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="alert-container">
+                <div class="row justify-content-center">
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        <div class="col-lg-8">
+                            <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show modern-alert">
+                                <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' }} alert-icon"></i>
+                                <span class="alert-message">{{ message }}</span>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
             {% endif %}
         {% endwith %}
 
-        <ul class="nav nav-tabs mb-4" id="mainTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="anomaly-tab" data-bs-toggle="tab" data-bs-target="#anomaly" type="button" role="tab" aria-controls="anomaly" aria-selected="true">
-                    <i class="fas fa-cogs me-2"></i>Anomaly Log
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="live-tab" data-bs-toggle="tab" data-bs-target="#live" type="button" role="tab" aria-controls="live" aria-selected="false">
-                    <i class="fas fa-video me-2"></i>Live Video Feed (RPi)
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="blockchain-tab" data-bs-toggle="tab" data-bs-target="#blockchain" type="button" role="tab" aria-controls="blockchain" aria-selected="false">
-                    <i class="fas fa-link me-2"></i>Blockchain Logs
-                </button>
-            </li>
-        </ul>
+        <div class="row g-4">
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs justify-content-center" id="mainTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="anomalies-tab" data-bs-toggle="tab" data-bs-target="#anomalies" type="button" role="tab">Anomaly Log</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="live-tab" data-bs-toggle="tab" data-bs-target="#live" type="button" role="tab">Live Video Feed (RPi)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="blockchain-tab" data-bs-toggle="tab" data-bs-target="#blockchain" type="button" role="tab">Blockchain Logs</button>
+                </li>
+            </ul>
 
-        <div class="tab-content" id="mainTabContent">
-            
-            <div class="tab-pane fade show active" id="anomaly" role="tabpanel" aria-labelledby="anomaly-tab">
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow">
-                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                                <h5><i class="fas fa-list-alt me-2"></i>Recent Anomaly Detections (Live from RPi)</h5>
-                                <button class="btn btn-sm btn-light" id="refreshAnomalies">
-                                    <i class="fas fa-sync-alt me-1"></i> Refresh
-                                </button>
-                            </div>
-                            <div class="card-body">
-                                <div id="anomalyStatus" class="text-center py-4">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p class="mt-2">Connecting to Raspberry Pi...</p>
+            <!-- Tab Content -->
+            <div class="tab-content mt-4">
+                <!-- Anomaly Log Tab -->
+                <div class="tab-pane fade show active" id="anomalies" role="tabpanel">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-10">
+                            <div class="dashboard-card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0"><i class="fas fa-bug me-2"></i>Recent Anomaly Detections (Live from RPi)</h5>
                                 </div>
-                                <div id="anomalyImagesRow" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 d-none">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <div id="anomalyStatus" class="loading-overlay d-none">
+                                            <div class="loading-spinner">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Loading...</span>
+                                                </div>
+                                                <p class="mt-2 mb-0">Fetching anomalies from RPi...</p>
+                                            </div>
+                                        </div>
+                                        <button id="refreshAnomalies" class="btn btn-outline-primary">
+                                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                                        </button>
                                     </div>
-                                <div id="noAnomalies" class="text-center py-4 text-muted d-none">
-                                    <i class="fas fa-check-circle fa-2x mb-3"></i>
-                                    <h5>No anomalies detected yet</h5>
-                                    <p>The system is running smoothly, or the camera is off.</p>
-                                </div>
-                                <div id="anomalyError" class="text-center py-4 text-danger d-none">
-                                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                                    <h5>RPi Connection Error</h5>
-                                    <p id="anomalyErrorMessage">Unable to fetch anomaly history from the Raspberry Pi.</p>
+                                    
+                                    <div id="anomalyImagesRow" class="row g-3 d-none">
+                                        <!-- Dynamic anomaly cards will be inserted here -->
+                                    </div>
+                                    
+                                    <div id="noAnomalies" class="text-center py-5 d-none">
+                                        <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+                                        <h5 class="mt-3 text-muted">No anomalies detected yet</h5>
+                                        <p class="text-muted">The system is running smoothly, or the camera is off.</p>
+                                    </div>
+
+                                    <div id="anomalyError" class="alert alert-danger d-none modern-alert">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span id="anomalyErrorMessage">RPi Connection Error</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="tab-pane fade" id="live" role="tabpanel" aria-labelledby="live-tab">
-                <div class="card shadow">
-                    <div class="card-header bg-success text-white">
-                        <h5><i class="fas fa-camera me-2"></i>Live Stream from Anomaly Detector (RPi)</h5>
-                    </div>
-                    <div class="card-body text-center p-0">
-                        <div class="video-container">
-                            <img id="liveVideoFeed" class="img-fluid live-stream-image" alt="Live Video Feed from Raspberry Pi" 
-                                src="" style="width: 100%; height: auto; object-fit: cover;">
-                        </div>
-                        <div class="p-3 text-muted">
-                            <p class="mb-0">Streamed from the Raspberry Pi on port 5000. Frame updates are driven by the RPi's capture loop.</p>
-                            <p class="small text-danger" id="video-error-message">Ensure your Raspberry Pi is publicly accessible via the configured RPI_BASE_URL.</p>
+                <!-- Live Feed Tab -->
+                <div class="tab-pane fade" id="live" role="tabpanel">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-10">
+                            <div class="dashboard-card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0"><i class="fas fa-video me-2"></i>Live Stream from Anomaly Detector (RPi)</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="video-container">
+                                        <img id="liveVideoFeed" class="live-stream-image" src="" alt="Live Video Feed" />
+                                    </div>
+                                    <div class="mt-3 text-center">
+                                        <p id="video-error-message" class="text-muted">
+                                            Streamed from the Raspberry Pi on port 5000. Frame updates are driven by the RPi's capture loop.<br>
+                                            Ensure your Raspberry Pi is publicly accessible via the configured RPI_BASE_URL.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
+                <!-- Blockchain Tab -->
+                <div class="tab-pane fade" id="blockchain" role="tabpanel">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-10">
+                            <div class="dashboard-card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0"><i class="fas fa-link me-2"></i>Immutable Anomaly Records</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <div class="stat-number">--</div>
+                                        <span id="totalTxs" class="stat-number">--</span>
+                                        <div class="stat-divider mx-3"></div>
+                                        <button id="refreshBlockchain" class="btn btn-outline-primary">
+                                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                                        </button>
+                                    </div>
 
-            <div class="tab-pane fade" id="blockchain" role="tabpanel" aria-labelledby="blockchain-tab">
-                <div class="card shadow">
-                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-th-list me-2"></i>Immutable Anomaly Records</h5>
-                        <button class="btn btn-sm btn-light" id="refreshBlockchain">
-                            <i class="fas fa-sync-alt me-1"></i> Refresh
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div id="txSummary" class="text-center py-3">
-                            <h3 id="totalTxs" class="display-4 text-primary">--</h3>
-                            <p class="lead">Total Anomalies Logged on Blockchain</p>
-                        </div>
-                        <hr>
-                        <div id="txLoader" class="text-center py-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                                    <div id="txLoader" class="loading-overlay">
+                                        <div class="loading-spinner">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <p class="mt-2 mb-0">Fetching blockchain data...</p>
+                                        </div>
+                                    </div>
+
+                                    <div id="txContent" class="d-none">
+                                        <div id="noTransactions" class="text-center py-5 d-none">
+                                            <i class="fas fa-database text-muted" style="font-size: 4rem;"></i>
+                                            <h5 class="mt-3 text-muted">No transactions found</h5>
+                                            <p class="text-muted">No anomaly records have been logged to the blockchain yet.</p>
+                                        </div>
+
+                                        <div id="txHistory" class="d-none">
+                                            <!-- Dynamic transaction items will be inserted here -->
+                                        </div>
+                                    </div>
+
+                                    <div id="txError" class="alert alert-danger d-none modern-alert">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span id="errorMessage">Blockchain Connection Error</span>
+                                    </div>
+                                </div>
                             </div>
-                            <p class="mt-2">Fetching blockchain data...</p>
-                        </div>
-                        
-                        <div id="txContent" class="d-none">
-                            <div id="txHistory" class="transaction-list"></div>
-                            <div id="noTransactions" class="text-center py-4 text-muted d-none">
-                                <i class="fas fa-inbox fa-2x mb-3"></i>
-                                <h5>No transactions found</h5>
-                                <p>No anomaly records have been logged to the blockchain yet.</p>
-                            </div>
-                        </div>
-                        
-                        <div id="txError" class="text-center py-4 text-danger d-none">
-                            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                            <h5>Blockchain Connection Error</h5>
-                            <p id="errorMessage">Unable to connect to the blockchain. Please try again later.</p>
                         </div>
                     </div>
                 </div>
@@ -156,6 +181,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script> 
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
