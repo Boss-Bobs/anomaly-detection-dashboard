@@ -7,33 +7,6 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        .video-container {
-            position: relative;
-            width: 100%;
-            height: auto;
-            aspect-ratio: 16 / 9;
-            background-color: #000;
-            border-radius: 0.5rem;
-            overflow: hidden;
-        }
-        .video-container canvas {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-        .info-overlay {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 10;
-            color: white;
-            font-size: 1.25rem;
-            text-shadow: 2px 2px 4px #000000;
-            user-select: none;
-        }
-    </style>
 </head>
 <body>
     <div class="hero-section">
@@ -54,126 +27,108 @@
     </div>
 
     <div class="container-fluid px-4 py-5">
-        <!-- Live Video Stream Section -->
-        <div class="row mb-5">
-            <div class="col-12 text-center">
-                <div class="card dashboard-card">
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            <i class="fas fa-video me-2"></i>
-                            Live Anomaly Feed
-                        </h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="video-container">
-                            <canvas id="live-canvas"></canvas>
-                            <div id="overlay" class="info-overlay">
-                                <p>Status: <span id="status-text">Connecting...</span></p>
-                                <p>Anomaly Score: <span id="anomaly-score">N/A</span></p>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="alert-container">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <ul class="nav nav-tabs mb-4" id="mainTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="anomaly-tab" data-bs-toggle="tab" data-bs-target="#anomaly" type="button" role="tab" aria-controls="anomaly" aria-selected="true">
+                    <i class="fas fa-cogs me-2"></i>Anomaly Log
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="live-tab" data-bs-toggle="tab" data-bs-target="#live" type="button" role="tab" aria-controls="live" aria-selected="false">
+                    <i class="fas fa-video me-2"></i>Live Video Feed (RPi)
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="blockchain-tab" data-bs-toggle="tab" data-bs-target="#blockchain" type="button" role="tab" aria-controls="blockchain" aria-selected="false">
+                    <i class="fas fa-link me-2"></i>Blockchain Logs
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabContent">
+            
+            <div class="tab-pane fade show active" id="anomaly" role="tabpanel" aria-labelledby="anomaly-tab">
+                <div class="row">
+                    <div class="col-lg-12">
+                        <div class="card shadow">
+                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                <h5><i class="fas fa-list-alt me-2"></i>Recent Anomaly Detections (Live from RPi)</h5>
+                                <button class="btn btn-sm btn-light" id="refreshAnomalies">
+                                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                                </button>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Flash Messages -->
-        <div id="flash-messages"></div>
-
-        <!-- Control Buttons -->
-        <div class="row mb-4">
-            <div class="col-12 text-center">
-                <div class="btn-group-custom">
-                    <button id="showAnomalyBtn" class="btn-custom btn-primary">
-                        <i class="fas fa-images me-2"></i>
-                        Anomaly Gallery
-                    </button>
-                    <button id="showCountBtn" class="btn-custom btn-success">
-                        <i class="fas fa-chart-bar me-2"></i>
-                        Anomaly Count
-                    </button>
-                    <button id="showTxHistoryBtn" class="btn-custom btn-warning">
-                        <i class="fas fa-history me-2"></i>
-                        Transaction History
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Anomaly Gallery -->
-        <div id="anomalyDisplay" class="row mb-5 section-hidden">
-            <div class="col-12">
-                <div class="dashboard-card">
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            <i class="fas fa-images me-2"></i>
-                            Anomaly Image Gallery
-                        </h3>
-                    </div>
-                    <div class="card-body">
-                        <div id="noImagesMessage" class="text-center py-5 text-muted">
-                            <i class="fas fa-image fa-3x mb-3"></i>
-                            <h4>No anomaly frames detected</h4>
-                            <p>Anomaly frames from 3D Convolutional Autoencoder will appear here</p>
-                        </div>
-                        
-                        <div id="imageGallery" class="d-none">
-                            <div id="thumbnailGrid" class="thumbnail-grid mb-4"></div>
-                            
-                            <div class="main-image-container">
-                                <img id="mainAnomalyImage" src="" alt="Selected Anomaly" class="main-image">
-                                <div id="imageInfo" class="image-info">
-                                    <span id="imageName">Select an image</span>
+                            <div class="card-body">
+                                <div id="anomalyStatus" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Connecting to Raspberry Pi...</p>
+                                </div>
+                                <div id="anomalyImagesRow" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 d-none">
+                                    </div>
+                                <div id="noAnomalies" class="text-center py-4 text-muted d-none">
+                                    <i class="fas fa-check-circle fa-2x mb-3"></i>
+                                    <h5>No anomalies detected yet</h5>
+                                    <p>The system is running smoothly, or the camera is off.</p>
+                                </div>
+                                <div id="anomalyError" class="text-center py-4 text-danger d-none">
+                                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                                    <h5>RPi Connection Error</h5>
+                                    <p id="anomalyErrorMessage">Unable to fetch anomaly history from the Raspberry Pi.</p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Count Display -->
-        <div id="countDisplay" class="row mb-5 section-hidden">
-            <div class="col-md-6 offset-md-3">
-                <div class="dashboard-card text-center">
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            <i class="fas fa-chart-bar me-2"></i>
-                            Anomaly Statistics
-                        </h3>
+            <div class="tab-pane fade" id="live" role="tabpanel" aria-labelledby="live-tab">
+                <div class="card shadow">
+                    <div class="card-header bg-success text-white">
+                        <h5><i class="fas fa-camera me-2"></i>Live Stream from Anomaly Detector (RPi)</h5>
                     </div>
-                    <div class="card-body">
-                        <div class="stats-container">
-                            <div class="stat-item">
-                                <div class="stat-number" id="localCount">0</div>
-                                <div class="stat-label">Detected Frames</div>
-                            </div>
-                            <div class="stat-divider"></div>
-                            <div class="stat-item">
-                                <div class="stat-number" id="blockchainCount">0</div>
-                                <div class="stat-label">Blockchain Records</div>
-                            </div>
+                    <div class="card-body text-center p-0">
+                        <div class="video-container">
+                            <img id="liveVideoFeed" class="img-fluid live-stream-image" alt="Live Video Feed from Raspberry Pi" 
+                                src="" style="width: 100%; height: auto; object-fit: cover;">
                         </div>
-                        <div id="blockchainStatus" class="mt-3">
-                            <span class="badge bg-secondary">Checking blockchain...</span>
+                        <div class="p-3 text-muted">
+                            <p class="mb-0">Streamed from the Raspberry Pi on port 5000. Frame updates are driven by the RPi's capture loop.</p>
+                            <p class="small text-danger" id="video-error-message">Ensure your Raspberry Pi is publicly accessible via the configured RPI_BASE_URL.</p>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Transaction History -->
-        <div id="txHistoryDisplay" class="row mb-5 section-hidden">
-            <div class="col-12">
-                <div class="dashboard-card">
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            <i class="fas fa-history me-2"></i>
-                            Blockchain Transaction History
-                        </h3>
+
+            <div class="tab-pane fade" id="blockchain" role="tabpanel" aria-labelledby="blockchain-tab">
+                <div class="card shadow">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-th-list me-2"></i>Immutable Anomaly Records</h5>
+                        <button class="btn btn-sm btn-light" id="refreshBlockchain">
+                            <i class="fas fa-sync-alt me-1"></i> Refresh
+                        </button>
                     </div>
                     <div class="card-body">
-                        <div id="txLoading" class="text-center py-4">
+                        <div id="txSummary" class="text-center py-3">
+                            <h3 id="totalTxs" class="display-4 text-primary">--</h3>
+                            <p class="lead">Total Anomalies Logged on Blockchain</p>
+                        </div>
+                        <hr>
+                        <div id="txLoader" class="text-center py-4">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
@@ -201,159 +156,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // --- Configuration ---
-        // REPLACE THIS WITH YOUR PI'S ACTUAL IP ADDRESS
-        const serverUrl = 'http://anomalyproject:5000'; 
-        const socket = io(serverUrl);
-        const canvas = document.getElementById('live-canvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status-text');
-        const anomalyScoreDisplay = document.getElementById('anomaly-score');
-
-        // --- WebSocket Event Handlers ---
-        socket.on('connect', () => {
-            console.log('Connected to Pi server via WebSocket');
-            statusText.textContent = 'Live Feed Connected';
-            statusText.style.color = 'lightgreen';
-        });
-
-        socket.on('disconnect', () => {
-            console.log('Disconnected from Pi server');
-            statusText.textContent = 'Disconnected. Retrying...';
-            statusText.style.color = 'red';
-        });
-
-        socket.on('connect_error', (err) => {
-            console.error('Connection error:', err);
-            statusText.textContent = 'Error connecting to Pi.';
-            statusText.style.color = 'red';
-        });
-
-        socket.on('video_frame', (data) => {
-            try {
-                const packet = JSON.parse(data);
-                const image = new Image();
-                image.onload = () => {
-                    canvas.width = image.width;
-                    canvas.height = image.height;
-                    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-                };
-                image.src = 'data:image/jpeg;base64,' + packet.frame;
-
-                // Update anomaly score
-                anomalyScoreDisplay.textContent = packet.anomaly_score.toFixed(4);
-                if (packet.is_anomaly) {
-                    anomalyScoreDisplay.style.color = 'red';
-                    statusText.textContent = 'ANOMALY DETECTED!';
-                    statusText.style.color = 'red';
-                } else {
-                    anomalyScoreDisplay.style.color = 'white';
-                    statusText.textContent = 'Live Feed Connected';
-                    statusText.style.color = 'lightgreen';
-                }
-
-            } catch (e) {
-                console.error('Error processing video frame:', e);
-                statusText.textContent = 'Error processing data.';
-                statusText.style.color = 'red';
-            }
-        });
-
-        // --- Dashboard Functionality (Your existing code) ---
-        // This is a simplified version; you can re-integrate your original main.js logic here.
-        document.getElementById('showAnomalyBtn').addEventListener('click', () => {
-            document.getElementById('anomalyDisplay').classList.remove('section-hidden');
-            document.getElementById('countDisplay').classList.add('section-hidden');
-            document.getElementById('txHistoryDisplay').classList.add('section-hidden');
-            fetchAnomalyImages();
-        });
-
-        document.getElementById('showCountBtn').addEventListener('click', () => {
-            document.getElementById('countDisplay').classList.remove('section-hidden');
-            document.getElementById('anomalyDisplay').classList.add('section-hidden');
-            document.getElementById('txHistoryDisplay').classList.add('section-hidden');
-            fetchBlockchainData();
-        });
-
-        document.getElementById('showTxHistoryBtn').addEventListener('click', () => {
-            document.getElementById('txHistoryDisplay').classList.remove('section-hidden');
-            document.getElementById('anomalyDisplay').classList.add('section-hidden');
-            document.getElementById('countDisplay').classList.add('section-hidden');
-            fetchBlockchainData();
-        });
-
-        async function fetchAnomalyImages() {
-            try {
-                const response = await fetch(`${serverUrl}/api/anomaly-images`);
-                const data = await response.json();
-                const gallery = document.getElementById('thumbnailGrid');
-                gallery.innerHTML = '';
-                if (data.images.length === 0) {
-                    document.getElementById('noImagesMessage').classList.remove('d-none');
-                    document.getElementById('imageGallery').classList.add('d-none');
-                } else {
-                    document.getElementById('noImagesMessage').classList.add('d-none');
-                    document.getElementById('imageGallery').classList.remove('d-none');
-                    data.images.forEach(image => {
-                        const thumbnail = document.createElement('img');
-                        thumbnail.src = `${serverUrl}/api/image/${image.filename}`;
-                        thumbnail.alt = image.filename;
-                        thumbnail.classList.add('thumbnail');
-                        thumbnail.addEventListener('click', () => {
-                            document.getElementById('mainAnomalyImage').src = thumbnail.src;
-                            document.getElementById('imageName').textContent = image.filename;
-                        });
-                        gallery.appendChild(thumbnail);
-                    });
-                }
-            } catch (e) {
-                console.error('Error fetching images:', e);
-            }
-        }
-
-        async function fetchBlockchainData() {
-            document.getElementById('txLoading').classList.remove('d-none');
-            document.getElementById('txContent').classList.add('d-none');
-            document.getElementById('txError').classList.add('d-none');
-
-            try {
-                const response = await fetch(`${serverUrl}/api/blockchain-data`);
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                const data = await response.json();
-                
-                document.getElementById('localCount').textContent = data.anomaly_count;
-                document.getElementById('blockchainCount').textContent = data.tx_logs.length;
-
-                const txList = document.getElementById('txHistory');
-                txList.innerHTML = '';
-
-                if (data.tx_logs.length > 0) {
-                    data.tx_logs.forEach(tx => {
-                        const txItem = document.createElement('div');
-                        txItem.classList.add('transaction-item');
-                        txItem.innerHTML = `
-                            <p><strong>Timestamp:</strong> ${tx.timestamp}</p>
-                            <p><strong>Frame ID:</strong> ${tx.frame}</p>
-                            <p><strong>Anomaly Score:</strong> ${tx.error}</p>
-                        `;
-                        txList.appendChild(txItem);
-                    });
-                    document.getElementById('txContent').classList.remove('d-none');
-                    document.getElementById('noTransactions').classList.add('d-none');
-                } else {
-                    document.getElementById('noTransactions').classList.remove('d-none');
-                    document.getElementById('txContent').classList.add('d-none');
-                }
-            } catch (e) {
-                console.error('Error fetching blockchain data:', e);
-                document.getElementById('txError').classList.remove('d-none');
-            } finally {
-                document.getElementById('txLoading').classList.add('d-none');
-            }
-        }
-    </script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script> 
 </body>
 </html>
