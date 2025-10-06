@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Determine RPi Base URL from the current environment (must match server-side logic)
     // NOTE: This client-side variable is only for fallback/visual clarity. The server (routes.py)
     // manages the official RPI_BASE_URL. We use a placeholder here.
-    const RPI_BASE_URL = 'https://70753645cb06.ngrok-free.app'; // Placeholder for the actual public IP set in RENDER ENV
+    const RPI_BASE_URL = 'https://218080efe1bd.ngrok-free.app'; // Placeholder for the actual public IP set in RENDER ENV
 
     // --- Core Functions ---
     
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // This MUST use the public IP/Hostname of your RPi and the port used by Flask (5000)
         // Ensure you replace this placeholder IP with your RPi's actual PUBLIC address.
-        const RPI_STREAM_URL = `https://70753645cb06.ngrok-free.app`; 
+        const RPI_STREAM_URL = `https://218080efe1bd.ngrok-free.app`; 
         
         // Set the source for the image tag to the RPi's video feed endpoint
         videoFeed.src = RPI_STREAM_URL;
