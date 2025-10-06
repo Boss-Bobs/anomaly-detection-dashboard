@@ -1,467 +1,192 @@
-class AnomalyDashboard {
-    constructor() {
-        this.anomalyImages = {};
-        this.imageMetadata = [];
-        this.blockchainData = {};
-        this.currentImageName = '';
-        this.loadedImages = new Set();
-        this.performanceStart = 0;
-        this.initializeEventListeners();
-        this.initializeVideoFeed();
-        this.addPerformanceBadge();
-    }
+document.addEventListener('DOMContentLoaded', () => {
+    // Determine RPi Base URL from the current environment (must match server-side logic)
+    // NOTE: This client-side variable is only for fallback/visual clarity. The server (routes.py)
+    // manages the official RPI_BASE_URL. We use a placeholder here.
+    const RPI_BASE_URL = 'http://192.168.235.162:5000'; // Placeholder for the actual public IP set in RENDER ENV
 
-    initializeEventListeners() {
-        // Main navigation buttons
-        document.getElementById('showAnomalyBtn').addEventListener('click', () => {
-            this.showSection('anomalyDisplay');
-            this.loadAnomalyImages();
-        });
+    // --- Core Functions ---
+    
+    function fetchAndDisplayAnomalies() {
+        const statusDiv = document.getElementById('anomalyStatus');
+        const imagesRow = document.getElementById('anomalyImagesRow');
+        const noAnomalies = document.getElementById('noAnomalies');
+        const anomalyError = document.getElementById('anomalyError');
+        const anomalyErrorMessage = document.getElementById('anomalyErrorMessage');
 
-        document.getElementById('showCountBtn').addEventListener('click', () => {
-            this.showSection('countDisplay');
-            this.loadStatistics();
-        });
+        // Show loading, hide others
+        statusDiv.classList.remove('d-none');
+        imagesRow.classList.add('d-none');
+        noAnomalies.classList.add('d-none');
+        anomalyError.classList.add('d-none');
 
-        document.getElementById('showTxHistoryBtn').addEventListener('click', () => {
-            this.showSection('txHistoryDisplay');
-            this.loadTransactionHistory();
-        });
-    }
+        fetch('/api/anomaly-images')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                statusDiv.classList.add('d-none');
+                imagesRow.innerHTML = '';
 
-    initializeVideoFeed() {
-        // DOM elements
-        const canvas = document.getElementById('live-canvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status-text');
-        const anomalyScoreText = document.getElementById('anomaly-score');
+                if (!data.success) {
+                    anomalyErrorMessage.textContent = data.error || 'Unknown RPi error.';
+                    anomalyError.classList.remove('d-none');
+                    return;
+                }
 
-        // WebSocket connection for real-time video frames and anomaly data
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // Use the same ngrok URL as the HTML video source
-        const wsUrl = `${protocol}//a5d267df180d.ngrok-free.app/ws/video_feed`;
-        let ws = new WebSocket(wsUrl);
-
-        // Image object to draw to canvas
-        const img = new Image();
-
-        // Event handler for when a new frame is received
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            // Update the live feed canvas
-            if (data.frame) {
-                img.onload = () => {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                };
-                img.src = `data:image/jpeg;base64,${data.frame}`;
-
-                // Update anomaly score and status
-                anomalyScoreText.textContent = data.anomaly_score.toFixed(4);
-                statusText.textContent = data.is_anomaly ? 'ANOMALY DETECTED!' : 'Normal';
-                statusText.style.color = data.is_anomaly ? 'red' : 'green';
-            }
-        };
-
-        // Event handlers for WebSocket status
-        ws.onopen = () => {
-            statusText.textContent = 'Connected';
-            statusText.style.color = 'green';
-            console.log('WebSocket connection established.');
-        };
-
-        ws.onclose = () => {
-            statusText.textContent = 'Disconnected';
-            statusText.style.color = 'red';
-            console.log('WebSocket connection closed.');
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            statusText.textContent = 'Error';
-            statusText.style.color = 'red';
-        };
-    }
-
-    showSection(sectionId) {
-        // Hide all sections
-        const sections = ['anomalyDisplay', 'countDisplay', 'txHistoryDisplay'];
-        sections.forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.classList.add('section-hidden');
-            }
-        });
-
-        // Show the selected section
-        const targetSection = document.getElementById(sectionId);
-        if (targetSection) {
-            targetSection.classList.remove('section-hidden');
-            targetSection.classList.add('fade-in');
-        }
-    }
-
-    async loadAnomalyImages() {
-        try {
-            this.performanceStart = Date.now();
-            this.showLoadingState('gallery');
-
-            const response = await fetch('/api/anomaly-images');
-            const data = await response.json();
-
-            if (data.success) {
-                this.imageMetadata = data.images;
-                this.displayAnomalyGallery();
-
-                const loadTime = (Date.now() - this.performanceStart) / 1000;
-                this.showPerformanceMetric(loadTime);
-
-                const blockchainCount = data.images.filter(img => img.blockchain_match).length;
-                this.showSuccess(`🔗 ${blockchainCount} blockchain-verified frames | 📁 ${data.total_count} total frames`);
-            } else {
-                this.showError('Failed to load anomaly metadata');
-            }
-        } catch (error) {
-            console.error('Error loading anomaly images:', error);
-            this.showError('Failed to load anomaly frames from detection results');
-        } finally {
-            this.hideLoadingState('gallery');
-        }
-    }
-
-    displayAnomalyGallery() {
-        const thumbnailGrid = document.getElementById('thumbnailGrid');
-        const mainImage = document.getElementById('mainAnomalyImage');
-        const imageGallery = document.getElementById('imageGallery');
-        const noImagesMessage = document.getElementById('noImagesMessage');
-
-        if (this.imageMetadata.length === 0) {
-            imageGallery.classList.add('d-none');
-            noImagesMessage.classList.remove('d-none');
-            return;
-        }
-
-        noImagesMessage.classList.add('d-none');
-        imageGallery.classList.remove('d-none');
-
-        // Clear existing thumbnails
-        thumbnailGrid.innerHTML = '';
-
-        // Create thumbnails with lazy loading
-        this.imageMetadata.forEach((metadata, index) => {
-            const thumbnailContainer = document.createElement('div');
-            thumbnailContainer.className = 'thumbnail-container';
-            
-            const img = document.createElement('img');
-            img.className = 'thumbnail loading';
-            img.alt = metadata.filename;
-            img.title = metadata.filename;
-            
-            // Add blockchain indicator
-            if (metadata.blockchain_match) {
-                img.classList.add('blockchain-matched');
-                thumbnailContainer.setAttribute('data-blockchain', 'true');
-            }
-            
-            // Placeholder while loading
-            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjE1MCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmNmY2ZjYiLz48dGV4dCB4PSI3NSIgeT0iNzUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkxvYWRpbmcuLi48L3RleHQ+PC9zdmc+';
-            
-            // Set first image as selected by default
-            if (index === 0) {
-                img.classList.add('selected');
-                this.loadMainImage(metadata, img);
-            }
-
-            img.addEventListener('click', () => {
-                this.selectThumbnail(img, metadata);
+                if (data.images.length === 0) {
+                    noAnomalies.classList.remove('d-none');
+                } else {
+                    data.images.forEach(anomaly => {
+                        const card = createAnomalyCard(anomaly);
+                        imagesRow.appendChild(card);
+                    });
+                    imagesRow.classList.remove('d-none');
+                }
+            })
+            .catch(error => {
+                statusDiv.classList.add('d-none');
+                anomalyErrorMessage.textContent = `Could not connect to RPi via Render: ${error.message}. Check RPI_BASE_URL configuration.`;
+                anomalyError.classList.remove('d-none');
+                console.error('Error fetching anomaly images:', error);
             });
-            
-            // Load thumbnail image lazily
-            this.loadThumbnailImage(metadata.filename, img);
-            
-            thumbnailContainer.appendChild(img);
-            thumbnailGrid.appendChild(thumbnailContainer);
-        });
     }
 
-    async selectThumbnail(imgElement, metadata) {
-        // Remove selection from all thumbnails
-        document.querySelectorAll('.thumbnail').forEach(thumb => {
-            thumb.classList.remove('selected');
-        });
-        
-        // Add selection to clicked thumbnail
-        imgElement.classList.add('selected');
-        
-        // Load main image
-        await this.loadMainImage(metadata, imgElement);
-    }
-    
-    async loadMainImage(metadata, thumbnailImg) {
-        const mainImage = document.getElementById('mainAnomalyImage');
-        const imageInfo = document.getElementById('imageName');
-        
-        try {
-            // Show loading state
-            mainImage.style.opacity = '0.5';
-            imageInfo.textContent = 'Loading image...';
-            
-            // Load full image
-            const imageData = await this.loadImageData(metadata.filename);
-            
-            if (imageData) {
-                mainImage.src = imageData;
-                mainImage.style.opacity = '1';
-                this.updateImageInfo(metadata);
-                this.currentImageName = metadata.filename;
-            }
-        } catch (error) {
-            console.error('Error loading main image:', error);
-            imageInfo.textContent = 'Error loading image';
-            mainImage.style.opacity = '1';
-        }
-    }
-    
-    async loadThumbnailImage(filename, imgElement) {
-        try {
-            const imageData = await this.loadImageData(filename);
-            if (imageData) {
-                imgElement.src = imageData;
-                imgElement.classList.remove('loading');
-            }
-        } catch (error) {
-            console.error(`Error loading thumbnail ${filename}:`, error);
-            imgElement.classList.add('error');
-        }
-    }
-    
-    async loadImageData(filename) {
-        // Check if already loaded
-        if (this.loadedImages.has(filename)) {
-            const cachedResponse = await fetch(`/api/image/${filename}`);
-            const data = await cachedResponse.json();
-            return data.success ? data.image : null;
-        }
-        
-        // Load image
-        const response = await fetch(`/api/image/${filename}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            this.loadedImages.add(filename);
-            return data.image;
-        }
-        
-        return null;
-    }
-    
-    updateImageInfo(metadata) {
-        const txData = metadata.tx_data;
-        let infoText;
-        
-        if (metadata.blockchain_match) {
-            infoText = `🔗 ${metadata.filename} | ${txData.folder} Frame ${txData.frame} | Error: ${txData.error}`;
-        } else {
-            infoText = `📁 ${metadata.filename} | Local file (${(metadata.size / 1024).toFixed(1)} KB)`;
-        }
-        
-        document.getElementById('imageName').textContent = infoText;
+    function createAnomalyCard(anomaly) {
+        const col = document.createElement('div');
+        col.className = 'col';
+
+        // CRITICAL: img src points directly to the RPi's API
+        col.innerHTML = `
+            <div class="card h-100 shadow-sm anomaly-card">
+                <img src="${anomaly.image_url}" class="card-img-top anomaly-img" alt="Anomaly Detected" loading="lazy">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">${anomaly.timestamp}</h6>
+                    <p class="card-text">
+                        <strong>Score:</strong> <span class="badge bg-danger">${anomaly.score}</span><br>
+                        <strong>Hash:</strong> <span class="hash-text">${anomaly.frame_hash.substring(0, 12)}...</span>
+                    </p>
+                </div>
+            </div>
+        `;
+        return col;
     }
 
-    async loadStatistics() {
-        // Count local images
-        const localCount = Object.keys(this.anomalyImages).length;
-        document.getElementById('localCount').textContent = localCount;
-
-        // Load blockchain data
-        try {
-            const response = await fetch('/api/blockchain-data');
-            const data = await response.json();
-            
-            if (data.success) {
-                document.getElementById('blockchainCount').textContent = data.anomaly_count;
-                document.getElementById('blockchainStatus').innerHTML =
-                    '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Connected to Sepolia</span>';
-                this.blockchainData = data;
-            } else {
-                document.getElementById('blockchainCount').textContent = 'N/A';
-                document.getElementById('blockchainStatus').innerHTML =
-                    '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Connection Failed</span>';
-            }
-        } catch (error) {
-            console.error('Error loading blockchain data:', error);
-            document.getElementById('blockchainCount').textContent = 'N/A';
-            document.getElementById('blockchainStatus').innerHTML =
-                '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Connection Error</span>';
-        }
-    }
-
-    async loadTransactionHistory() {
-        const loading = document.getElementById('txLoading');
-        const content = document.getElementById('txContent');
-        const error = document.getElementById('txError');
-
-        // Show loading state
-        loading.classList.remove('d-none');
-        content.classList.add('d-none');
-        error.classList.add('d-none');
-
-        try {
-            const response = await fetch('/api/blockchain-data');
-            const data = await response.json();
-
-            loading.classList.add('d-none');
-
-            if (data.success) {
-                content.classList.remove('d-none');
-                this.displayTransactionHistory(data.tx_logs);
-            } else {
-                error.classList.remove('d-none');
-                document.getElementById('errorMessage').textContent =
-                    data.error || 'Unable to connect to the blockchain.';
-            }
-        } catch (err) {
-            loading.classList.add('d-none');
-            error.classList.remove('d-none');
-            document.getElementById('errorMessage').textContent =
-                'Network error. Please check your connection.';
-        }
-    }
-
-    displayTransactionHistory(txLogs) {
+    function fetchAndDisplayBlockchain() {
+        const txLoader = document.getElementById('txLoader');
+        const txContent = document.getElementById('txContent');
         const txHistory = document.getElementById('txHistory');
         const noTransactions = document.getElementById('noTransactions');
+        const txError = document.getElementById('txError');
+        const totalTxs = document.getElementById('totalTxs');
 
-        if (txLogs.length === 0) {
-            txHistory.innerHTML = '';
-            noTransactions.classList.remove('d-none');
-            return;
-        }
+        // Show loading, hide others
+        txLoader.classList.remove('d-none');
+        txContent.classList.add('d-none');
+        txError.classList.add('d-none');
 
-        noTransactions.classList.add('d-none');
-        txHistory.innerHTML = '';
+        fetch('/api/blockchain-data')
+            .then(response => response.json())
+            .then(data => {
+                txLoader.classList.add('d-none');
+                txContent.classList.remove('d-none');
+                
+                if (!data.success) {
+                    document.getElementById('errorMessage').textContent = data.error;
+                    txError.classList.remove('d-none');
+                    totalTxs.textContent = '--';
+                    return;
+                }
+                
+                totalTxs.textContent = data.anomaly_count;
+                txHistory.innerHTML = '';
 
-        txLogs.forEach((log, index) => {
-            const txItem = document.createElement('div');
-            txItem.className = 'transaction-item';
-            
-            txItem.innerHTML = `
-                <div class="tx-header">
-                    <span class="tx-index">#${log.index || index}</span>
-                    <span class="tx-timestamp">
-                        <i class="fas fa-clock me-1"></i>
-                        ${log.timestamp}
-                    </span>
-                </div>
-                <div class="tx-details">
-                    <div class="tx-detail">
-                        <div class="tx-detail-label">Folder</div>
-                        <div class="tx-detail-value">${log.folder}</div>
-                    </div>
-                    <div class="tx-detail">
-                        <div class="tx-detail-label">Frame</div>
-                        <div class="tx-detail-value">${log.frame}</div>
-                    </div>
-                    <div class="tx-detail">
-                        <div class="tx-detail-label">Error Type</div>
-                        <div class="tx-detail-value">${log.error}</div>
-                    </div>
-                </div>
-            `;
-
-            txHistory.appendChild(txItem);
-        });
+                if (data.tx_logs.length === 0) {
+                    noTransactions.classList.remove('d-none');
+                } else {
+                    noTransactions.classList.add('d-none');
+                    data.tx_logs.reverse().forEach(log => {
+                        const txItem = createTransactionItem(log);
+                        txHistory.appendChild(txItem);
+                    });
+                }
+            })
+            .catch(error => {
+                txLoader.classList.add('d-none');
+                txError.classList.remove('d-none');
+                document.getElementById('errorMessage').textContent = `Failed to fetch blockchain data: ${error}`;
+                totalTxs.textContent = '--';
+                console.error('Error fetching blockchain data:', error);
+            });
     }
 
-    showSuccess(message) {
-        this.showAlert(message, 'success');
-    }
+    function createTransactionItem(log) {
+        const item = document.createElement('div');
+        item.className = 'transaction-item mb-3 p-3 border rounded';
 
-    showError(message) {
-        this.showAlert(message, 'error');
-    }
-
-    showLoadingState(section) {
-        const loadingHtml = `
-            <div class="loading-overlay" id="${section}Loading">
-                <div class="loading-spinner">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Processing anomaly data...</p>
+        // Map contract fields to human-readable labels
+        const score = log.error;
+        const timestamp = log.folder;
+        const hash = log.frame; 
+        
+        item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    <strong>Anomaly Recorded</strong>
                 </div>
+                <small class="text-muted">${timestamp}</small>
+            </div>
+            <div class="mt-2 small">
+                <p class="mb-1"><strong>Score:</strong> <span class="badge bg-warning text-dark">${score}</span></p>
+                <p class="mb-0"><strong>Frame ID (uint256):</strong> <span class="text-break">${hash}</span></p>
             </div>
         `;
-        
-        const targetSection = document.getElementById(`${section}Display`) || document.body;
-        const loadingDiv = document.createElement('div');
-        loadingDiv.innerHTML = loadingHtml;
-        targetSection.appendChild(loadingDiv.firstElementChild);
+        return item;
     }
-    
-    hideLoadingState(section) {
-        const loadingOverlay = document.getElementById(`${section}Loading`);
-        if (loadingOverlay) {
-            loadingOverlay.remove();
+
+    // --- NEW: Function to set up the RPi Live Video Feed ---
+    function setupLiveVideoFeed() {
+        const videoFeed = document.getElementById('liveVideoFeed');
+        const videoErrorMessage = document.getElementById('video-error-message');
+        
+        // This MUST use the public IP/Hostname of your RPi and the port used by Flask (5000)
+        // Ensure you replace this placeholder IP with your RPi's actual PUBLIC address.
+        const RPI_STREAM_URL = `http://192.168.235.162:5000/video_feed`; 
+        
+        // Set the source for the image tag to the RPi's video feed endpoint
+        videoFeed.src = RPI_STREAM_URL;
+
+        // Simple error handling for stream failure
+        videoFeed.onerror = () => {
+            videoFeed.alt = "Failed to load live video stream.";
+            videoErrorMessage.textContent = `CRITICAL: Stream failed to load from ${RPI_STREAM_URL}. Check RPi power, network, and firewall settings (Port 5000).`;
+            videoErrorMessage.classList.add('text-danger');
+             videoErrorMessage.classList.remove('text-success');
+        };
+        videoFeed.onload = () => {
+             videoErrorMessage.textContent = "Live Stream Active. Latency is dependent on your network connection.";
+             videoErrorMessage.classList.remove('text-danger');
+             videoErrorMessage.classList.add('text-success');
         }
     }
-    
-    showAlert(message, type) {
-        const alertClass = type === 'error' ? 'alert-danger' : 'alert-success';
-        const icon = type === 'error' ? '⚠️' : '✅';
-        const alertHtml = `
-            <div class="alert ${alertClass} alert-dismissible fade show modern-alert" role="alert">
-                <span class="alert-icon">${icon}</span>
-                <span class="alert-message">${message}</span>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
 
-        const container = document.querySelector('.container-fluid');
-        const firstChild = container.firstElementChild;
-        const alertDiv = document.createElement('div');
-        alertDiv.innerHTML = alertHtml;
-        container.insertBefore(alertDiv, firstChild);
 
-        // Auto-dismiss after 4 seconds for success, 6 for error
-        const timeout = type === 'error' ? 6000 : 4000;
-        setTimeout(() => {
-            const alert = alertDiv.querySelector('.alert');
-            if (alert) {
-                alert.classList.remove('show');
-                setTimeout(() => alertDiv.remove(), 150);
-            }
-        }, timeout);
-    }
+    // --- Initialization and Event Listeners ---
+    fetchAndDisplayAnomalies();
+    fetchAndDisplayBlockchain();
     
-    addPerformanceBadge() {
-        const badge = document.createElement('div');
-        badge.className = 'performance-badge';
-        badge.id = 'performanceBadge';
-        badge.innerHTML = '🚀 Optimized Dashboard';
-        document.body.appendChild(badge);
-        
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            badge.style.opacity = '0';
-            setTimeout(() => badge.remove(), 500);
-        }, 5000);
-    }
-    
-    showPerformanceMetric(loadTime) {
-        const badge = document.getElementById('performanceBadge');
-        if (badge) {
-            badge.innerHTML = `⚡ Loaded in ${loadTime.toFixed(1)}s`;
-            badge.style.backgroundColor = loadTime < 2 ? 'rgba(40, 167, 69, 0.9)' :
-                                         loadTime < 5 ? 'rgba(255, 193, 7, 0.9)' :
-                                         'rgba(220, 53, 69, 0.9)';
+    // Set up listeners for manual refresh
+    document.getElementById('refreshAnomalies').addEventListener('click', fetchAndDisplayAnomalies);
+    document.getElementById('refreshBlockchain').addEventListener('click', fetchAndDisplayBlockchain);
+
+    // Set up listeners for tab changes (Only call setupLiveVideoFeed when the live tab is actively shown)
+    const mainTab = document.getElementById('mainTab');
+    mainTab.addEventListener('shown.bs.tab', (event) => {
+        if (event.target.id === 'live-tab') {
+            setupLiveVideoFeed();
         }
-    }
-}
-
-// Initialize the dashboard when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new AnomalyDashboard();
+    });
 });
