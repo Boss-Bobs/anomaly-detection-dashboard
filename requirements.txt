@@ -5,6 +5,7 @@ opencv-python-headless
 web3
 opencv-python
 gunicorn
+requests
 
 
 
