@@ -149,30 +149,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- NEW: Function to set up the RPi Live Video Feed ---
     function setupLiveVideoFeed() {
-        const videoFeed = document.getElementById('liveVideoFeed');
-        const videoErrorMessage = document.getElementById('video-error-message');
-        
-        // This MUST use the public IP/Hostname of your RPi and the port used by Flask (5000)
-        // Ensure you replace this placeholder IP with your RPi's actual PUBLIC address.
-        const RPI_STREAM_URL = `https://relativistic-kacie-puffingly.ngrok-free.dev`; 
-        
-        // Set the source for the image tag to the RPi's video feed endpoint
-        videoFeed.src = RPI_STREAM_URL;
+    const videoFeed = document.getElementById('liveVideoFeed');
+    const videoErrorMessage = document.getElementById('video-error-message');
 
-        // Simple error handling for stream failure
-        videoFeed.onerror = () => {
-            videoFeed.alt = "Failed to load live video stream.";
-            videoErrorMessage.textContent = `CRITICAL: Stream failed to load from ${RPI_STREAM_URL}. Check RPi power, network, and firewall settings (Port 5000).`;
-            videoErrorMessage.classList.add('text-danger');
-             videoErrorMessage.classList.remove('text-success');
-        };
-        videoFeed.onload = () => {
-             videoErrorMessage.textContent = "Live Stream Active. Latency is dependent on your network connection.";
-             videoErrorMessage.classList.remove('text-danger');
-             videoErrorMessage.classList.add('text-success');
+    const RPI_STREAM_URL = 'https://relativistic-kacie-puffingly.ngrok-free.dev';
+
+    // Connect to WebSocket namespace
+    const socket = io(RPI_STREAM_URL + '/ws/video_feed', {
+        transports: ['websocket'],
+        extraHeaders: {
+            'ngrok-skip-browser-warning': 'true'  // Bypass ngrok warning if needed
         }
-    }
+    });
 
+    socket.on('connect', () => {
+        console.log('Connected to RPi WebSocket');
+        videoErrorMessage.textContent = 'Live Stream Active. Latency depends on network.';
+        videoErrorMessage.classList.remove('text-danger');
+        videoErrorMessage.classList.add('text-success');
+    });
+
+    socket.on('video_frame', (jsonData) => {
+        const data = JSON.parse(jsonData);
+        videoFeed.src = `data:image/jpeg;base64,${data.frame}`;
+        // Optional: Handle anomaly overlay or alerts
+        if (data.is_anomaly) {
+            console.log(`Anomaly detected! Score: ${data.anomaly_score}`);
+            // You could add a red border or alert here
+        }
+    });
+
+    socket.on('disconnect', () => {
+        videoErrorMessage.textContent = 'Disconnected from RPi WS. Check ngrok/RPi.';
+        videoErrorMessage.classList.add('text-danger');
+        videoErrorMessage.classList.remove('text-success');
+    });
+
+    socket.on('connect_error', (err) => {
+        videoErrorMessage.textContent = `Failed to connect to RPi WS: ${err.message}. Check ngrok/RPi.`;
+        videoErrorMessage.classList.add('text-danger');
+        videoErrorMessage.classList.remove('text-success');
+        console.error('WebSocket connect error:', err);
+    });
+}
 
     // --- Initialization and Event Listeners ---
     fetchAndDisplayAnomalies();
