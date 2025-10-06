@@ -620,3 +620,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #764ba2, #667eea);
 }
+
+/* --- New Styles for RPi Live Video Feed --- */
+
+/* Ensure the video container fits nicely within the card */
+.video-container {
+    width: 100%;
+    overflow: hidden; /* Hide anything that spills over */
+}
+
+/* Style for the image tag used for the MJPEG stream */
+.live-stream-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: cover; /* Ensures the image covers the container without distortion */
+}
