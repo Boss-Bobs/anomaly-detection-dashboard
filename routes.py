@@ -99,7 +99,7 @@ def get_anomaly_images():
 
     # --------------------------------------------------------------------------------------
     # CRITICAL: This section calls the RPi detector's API
-    rpi_api_url = f"{rpi_base_url}/api/blockchain-data"  # Updated to match RPi endpoint
+    rpi_api_url = f"{rpi_base_url}/api/blockchain-data"
     rpi_data = []
     
     try:
@@ -110,8 +110,8 @@ def get_anomaly_images():
             timeout=10, # Increased timeout for video stream / large data
             headers={
                 'Host': host_header,
-                'ngrok-skip-browser-warning': 'true'  # Bypass ngrok free tier warning (fixes 500)
-            }
+                'ngrok-skip-browser-warning': 'true'  # Added
+            } # Explicitly set Host Header
         )
         response.raise_for_status()  # Raises HTTPError for bad status codes (4xx or 5xx)
         
